@@ -185,7 +185,9 @@ defmodule Lux.LLM.ProviderUtils do
   when strict mode is enabled, or `{:ok, raw_string}` in lenient mode.
   """
   @spec parse_json_content(String.t() | nil, keyword()) :: {:ok, term()} | {:error, String.t()}
-  def parse_json_content(nil, _opts \\ []), do: {:ok, nil}
+  def parse_json_content(content, opts \\ [])
+
+  def parse_json_content(nil, _opts), do: {:ok, nil}
 
   def parse_json_content(content, opts) when is_binary(content) do
     case Jason.decode(content) do
@@ -229,7 +231,9 @@ defmodule Lux.LLM.ProviderUtils do
   Returns empty list for empty input.
   """
   @spec build_tools_config([term()], atom()) :: [map()]
-  def build_tools_config([], _format \\ :openai), do: []
+  def build_tools_config(tools, format \\ :openai)
+
+  def build_tools_config([], _format), do: []
 
   def build_tools_config(tools, :openai) do
     Enum.map(tools, &tool_to_openai_function/1)
