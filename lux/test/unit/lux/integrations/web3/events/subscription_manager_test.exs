@@ -4,7 +4,7 @@ defmodule Lux.Integrations.Web3.Events.SubscriptionManagerTest do
   alias Lux.Integrations.Web3.Events.SubscriptionManager
 
   setup do
-    {:ok, pid} = SubscriptionManager.start_link(name: nil)
+    {:ok, pid} = SubscriptionManager.start_link(name: :"sub_mgr_#{:rand.uniform(1_000_000)}")
     %{pid: pid}
   end
 

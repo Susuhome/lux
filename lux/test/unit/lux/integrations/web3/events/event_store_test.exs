@@ -4,7 +4,7 @@ defmodule Lux.Integrations.Web3.Events.EventStoreTest do
   alias Lux.Integrations.Web3.Events.EventStore
 
   setup do
-    {:ok, pid} = EventStore.start_link(name: nil, max_events: 100)
+    {:ok, pid} = EventStore.start_link(name: :"test_#{:rand.uniform(1_000_000)}", max_events: 100)
     %{pid: pid}
   end
 

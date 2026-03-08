@@ -6,7 +6,7 @@ defmodule Lux.Integrations.Web3.Events.EventMonitorTest do
   test "starts and reports status" do
     {:ok, pid} = EventMonitor.start_link(
       chain: :ethereum, rpc_url: "https://test",
-      poll_interval_ms: 100_000, auto_start: false, name: nil
+      poll_interval_ms: 100_000, auto_start: false, name: :"test_#{:rand.uniform(1_000_000)}"
     )
 
     status = EventMonitor.status(pid)
@@ -18,7 +18,7 @@ defmodule Lux.Integrations.Web3.Events.EventMonitorTest do
   test "add and remove watches" do
     {:ok, pid} = EventMonitor.start_link(
       chain: :ethereum, rpc_url: "https://test",
-      poll_interval_ms: 100_000, auto_start: false, name: nil
+      poll_interval_ms: 100_000, auto_start: false, name: :"test_#{:rand.uniform(1_000_000)}"
     )
 
     {:ok, id} = EventMonitor.add_watch(pid, %{address: "0xcontract"})
@@ -31,7 +31,7 @@ defmodule Lux.Integrations.Web3.Events.EventMonitorTest do
   test "remove unknown watch returns error" do
     {:ok, pid} = EventMonitor.start_link(
       chain: :ethereum, rpc_url: "https://test",
-      auto_start: false, name: nil
+      auto_start: false, name: :"test_#{:rand.uniform(1_000_000)}"
     )
 
     assert {:error, :not_found} = EventMonitor.remove_watch(pid, 999)
@@ -40,7 +40,7 @@ defmodule Lux.Integrations.Web3.Events.EventMonitorTest do
   test "get_events returns empty initially" do
     {:ok, pid} = EventMonitor.start_link(
       chain: :ethereum, rpc_url: "https://test",
-      auto_start: false, name: nil
+      auto_start: false, name: :"test_#{:rand.uniform(1_000_000)}"
     )
 
     assert {:ok, []} = EventMonitor.get_events(pid)
