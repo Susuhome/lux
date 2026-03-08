@@ -52,6 +52,6 @@ defmodule Lux.Integrations.Twitter do
   Returns the configured bearer token.
   """
   def bearer_token do
-    Application.get_env(:lux, :api_keys)[:twitter_bearer]
+    (Application.get_env(:lux, :api_keys) || %{})[:twitter_bearer] || ""
   end
 end

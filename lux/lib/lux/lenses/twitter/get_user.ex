@@ -10,61 +10,28 @@ defmodule Lux.Lenses.Twitter.GetUser do
       {:ok, %{id: "123", name: "Eli", username: "elikirf", ...}}
   """
 
-  use Lux.Lens,
-    name: "Get User",
-    description: "Fetches a Twitter user profile by ID or username",
-    url: "https://api.twitter.com/2/users",
-    method: :get,
-    headers: [{"Content-Type", "application/json"}],
-    auth: %{
-      type: :custom,
-      auth_function: &Lux.Integrations.Twitter.add_auth_header/1
-    },
-    schema: %{
-      type: :object,
-      properties: %{
-        user_id: %{type: :string, description: "User ID to fetch"},
-        username: %{type: :string, description: "Username to fetch (without @)"}
-      }
-    }
-
   alias Lux.Integrations.Twitter.Client
 
   @default_user_fields "id,name,username,created_at,description,public_metrics,profile_image_url,verified,location,url"
 
-  @impl true
-  def before_focus(params) do
+  def focus(params, _opts \\ []) do
     user_id = params[:user_id] || params["user_id"]
     username = params[:username] || params["username"]
 
-    {url, query_params} =
+    path =
       cond do
-        user_id ->
-          {"https://api.twitter.com/2/users/#{user_id}",
-           %{"user.fields" => @default_user_fields}}
-
-        username ->
-          {"https://api.twitter.com/2/users/by/username/#{username}",
-           %{"user.fields" => @default_user_fields}}
-
-        true ->
-          {"https://api.twitter.com/2/users/me",
-           %{"user.fields" => @default_user_fields}}
+        user_id -> "/users/#{user_id}"
+        username -> "/users/by/username/#{username}"
+        true -> "/users/me"
       end
 
-    %{url: url, params: query_params}
-  end
+    query_params = %{"user.fields" => @default_user_fields}
 
-  @impl true
-  def after_focus(%{"data" => data}) do
-    {:ok, format_user(data)}
+    case Client.request(:get, path, %{params: query_params}) do
+      {:ok, %{data: data}} when is_map(data) -> {:ok, format_user(data)}
+      {:error, error} -> {:error, error}
+    end
   end
-
-  def after_focus(%{"errors" => [%{"detail" => detail} | _]}) do
-    {:error, detail}
-  end
-
-  def after_focus(other), do: {:error, "Unexpected response: #{inspect(other)}"}
 
   defp format_user(data) do
     metrics = data["public_metrics"] || %{}

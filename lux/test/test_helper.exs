@@ -8,6 +8,7 @@ defmodule UnitAPICase do
   alias Lux.Integrations.Discord.Client, as: DiscordClient
   alias Lux.Integrations.Telegram.Client, as: TelegramClient
   alias Lux.Lenses.Etherscan
+  alias Lux.Integrations.Twitter.Client, as: TwitterClient
   alias Lux.LLM.Anthropic
   alias Lux.LLM.OpenAI
   alias Lux.LLM.TogetherAI
@@ -27,6 +28,7 @@ defmodule UnitAPICase do
     Application.put_env(:lux, DiscordClient, plug: {Req.Test, DiscordClientMock})
     Application.put_env(:lux, TelegramClient, plug: {Req.Test, TelegramClientMock})
     Application.put_env(:lux, TogetherAI, plug: {Req.Test, TogetherAI})
+    Application.put_env(:lux, TwitterClient, plug: {Req.Test, TwitterClient})
     :ok
   end
 end

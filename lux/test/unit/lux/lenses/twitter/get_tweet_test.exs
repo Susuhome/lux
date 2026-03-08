@@ -2,6 +2,7 @@ defmodule Lux.Lenses.Twitter.GetTweetTest do
   use UnitAPICase, async: true
 
   alias Lux.Lenses.Twitter.GetTweet
+  alias Lux.Integrations.Twitter.Client, as: TwitterClient
 
   setup do
     Req.Test.verify_on_exit!()
@@ -9,7 +10,9 @@ defmodule Lux.Lenses.Twitter.GetTweetTest do
 
   describe "focus/1" do
     test "fetches tweet with includes" do
-      Req.Test.stub(GetTweet, fn conn ->
+      Req.Test.stub(TwitterClient, fn conn ->
+        assert conn.request_path == "/2/tweets/123"
+
         Req.Test.json(conn, %{
           "data" => %{
             "id" => "123",
@@ -19,11 +22,8 @@ defmodule Lux.Lenses.Twitter.GetTweetTest do
             "conversation_id" => "123",
             "lang" => "en",
             "public_metrics" => %{
-              "like_count" => 42,
-              "retweet_count" => 10,
-              "reply_count" => 5,
-              "quote_count" => 2,
-              "impression_count" => 1000
+              "like_count" => 42, "retweet_count" => 10, "reply_count" => 5,
+              "quote_count" => 2, "impression_count" => 1000
             }
           },
           "includes" => %{
@@ -41,7 +41,7 @@ defmodule Lux.Lenses.Twitter.GetTweetTest do
     end
 
     test "fetches tweet without includes" do
-      Req.Test.stub(GetTweet, fn conn ->
+      Req.Test.stub(TwitterClient, fn conn ->
         Req.Test.json(conn, %{
           "data" => %{"id" => "789", "text" => "No includes", "author_id" => "111"}
         })
@@ -53,11 +53,11 @@ defmodule Lux.Lenses.Twitter.GetTweetTest do
     end
 
     test "handles errors" do
-      Req.Test.stub(GetTweet, fn conn ->
-        Req.Test.json(conn, %{"errors" => [%{"detail" => "Not authorized"}]})
+      Req.Test.stub(TwitterClient, fn conn ->
+        conn |> Plug.Conn.send_resp(401, Jason.encode!(%{"errors" => [%{"detail" => "Not authorized"}]}))
       end)
 
-      assert {:error, "Not authorized"} = GetTweet.focus(%{tweet_id: "000"})
+      assert {:error, :unauthorized} = GetTweet.focus(%{tweet_id: "000"})
     end
   end
 end

@@ -93,23 +93,27 @@ defmodule Lux.Integrations.Twitter.Client do
 
     auth_header = build_auth_header(auth_type, :post, url, opts)
 
-    # Use multipart for media upload
-    multipart =
-      Multipart.new()
-      |> Multipart.add_part(Multipart.Part.binary_body(media_data, [
-        {"content-disposition", "form-data; name=\"media_data\""},
-        {"content-type", media_type}
-      ]))
-      |> Multipart.add_part(Multipart.Part.text_body(media_type, [
-        {"content-disposition", "form-data; name=\"media_category\""}
-      ]))
+    # Build multipart body manually (no external Multipart dep)
+    boundary = "----ElixirMultipart#{:erlang.unique_integer([:positive])}"
+    media_b64 = Base.encode64(media_data)
+
+    body =
+      "--#{boundary}\r\n" <>
+        "Content-Disposition: form-data; name=\"media_data\"\r\n\r\n" <>
+        media_b64 <>
+        "\r\n--#{boundary}\r\n" <>
+        "Content-Disposition: form-data; name=\"media_category\"\r\n\r\n" <>
+        media_type <>
+        "\r\n--#{boundary}--\r\n"
 
     [
       method: :post,
       url: url,
-      headers: [auth_header],
-      body: Multipart.body(multipart),
-      headers: Multipart.headers(multipart) ++ [auth_header]
+      headers: [
+        auth_header,
+        {"content-type", "multipart/form-data; boundary=#{boundary}"}
+      ],
+      body: body
     ]
     |> Keyword.merge(Application.get_env(:lux, __MODULE__, []))
     |> maybe_add_plug(opts[:plug])
@@ -169,10 +173,39 @@ defmodule Lux.Integrations.Twitter.Client do
        when status in 200..299 do
     rate_limit = extract_rate_limit(headers)
 
-    case body do
-      %{"data" => data} -> {:ok, %{data: data, rate_limit: rate_limit}}
-      data when is_map(data) -> {:ok, %{data: data, rate_limit: rate_limit}}
-      _ -> {:ok, %{data: body, rate_limit: rate_limit}}
+    parsed =
+      case body do
+        b when is_binary(b) ->
+          case Jason.decode(b) do
+            {:ok, decoded} -> decoded
+            {:error, _} -> b
+          end
+
+        other ->
+          other
+      end
+
+    case parsed do
+      %{"data" => data, "includes" => includes, "meta" => meta} ->
+        {:ok, %{data: data, includes: includes, meta: meta, rate_limit: rate_limit}}
+
+      %{"data" => data, "includes" => includes} ->
+        {:ok, %{data: data, includes: includes, rate_limit: rate_limit}}
+
+      %{"data" => data, "meta" => meta} ->
+        {:ok, %{data: data, meta: meta, rate_limit: rate_limit}}
+
+      %{"data" => data} ->
+        {:ok, %{data: data, rate_limit: rate_limit}}
+
+      %{"meta" => meta} ->
+        {:ok, %{data: nil, meta: meta, rate_limit: rate_limit}}
+
+      data when is_map(data) ->
+        {:ok, %{data: data, rate_limit: rate_limit}}
+
+      _ ->
+        {:ok, %{data: parsed, rate_limit: rate_limit}}
     end
   end
 
@@ -189,16 +222,23 @@ defmodule Lux.Integrations.Twitter.Client do
     {:error, {:rate_limited, reset_at}}
   end
 
-  defp handle_response({:ok, %{status: status, body: %{"errors" => [%{"message" => msg} | _]}}}) do
-    {:error, {status, msg}}
-  end
+  defp handle_response({:ok, %{status: status, body: body} = _resp}) when status >= 400 do
+    parsed =
+      case body do
+        b when is_binary(b) ->
+          case Jason.decode(b) do
+            {:ok, decoded} -> decoded
+            {:error, _} -> body
+          end
+        other -> other
+      end
 
-  defp handle_response({:ok, %{status: status, body: %{"detail" => detail}}}) do
-    {:error, {status, detail}}
-  end
-
-  defp handle_response({:ok, %{status: status, body: body}}) do
-    {:error, {status, inspect(body)}}
+    case parsed do
+      %{"errors" => [%{"message" => msg} | _]} -> {:error, {status, msg}}
+      %{"errors" => [%{"detail" => detail} | _]} -> {:error, {status, detail}}
+      %{"detail" => detail} -> {:error, {status, detail}}
+      _ -> {:error, {status, inspect(parsed)}}
+    end
   end
 
   defp handle_response({:error, error}) do
@@ -218,7 +258,9 @@ defmodule Lux.Integrations.Twitter.Client do
 
   defp parse_int(nil), do: nil
   defp parse_int(val) when is_binary(val), do: String.to_integer(val)
-  defp parse_int(val), do: val
+  defp parse_int([val | _]) when is_binary(val), do: String.to_integer(val)
+  defp parse_int(val) when is_integer(val), do: val
+  defp parse_int(_), do: nil
 
   defp maybe_add_json(opts, nil), do: opts
   defp maybe_add_json(opts, json), do: Keyword.put(opts, :json, json)
@@ -230,6 +272,6 @@ defmodule Lux.Integrations.Twitter.Client do
   defp maybe_add_plug(opts, plug), do: Keyword.put(opts, :plug, plug)
 
   defp get_config(key) do
-    Application.get_env(:lux, :api_keys)[key]
+    (Application.get_env(:lux, :api_keys) || %{})[key] || ""
   end
 end
