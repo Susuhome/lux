@@ -1,32 +1,51 @@
 defmodule Lux.Rust.CargoManager do
   @moduledoc """
-  Cargo package management: Cargo.toml generation/parsing, dependency resolution,
-  version management, build pipeline, and package caching.
+  Cargo package management for Rust in Lux.
+
+  Supports:
+  - Cargo.toml generation and parsing
+  - Dependency add/remove/resolution with semver validation
+  - Build command generation (profile, target, features)
+  - Version management (bump major/minor/patch)
+  - Package cache key generation (SHA256)
+
+  ## Example
+
+      {:ok, toml} = CargoManager.generate_toml(%{name: "my_crate", version: "1.0.0", dependencies: %{serde: "1.0"}})
+      {:ok, parsed} = CargoManager.parse_toml(toml)
+      {:ok, new_ver} = CargoManager.bump_version("1.2.3", :minor)
   """
 
   @default_edition "2021"
 
-  @doc "Generate a Cargo.toml string from a config map."
+  @type dep_spec :: String.t() | %{version: String.t(), features: [String.t()]}
+
+  @spec generate_toml(map()) :: {:ok, String.t()} | {:error, atom()}
   def generate_toml(config) do
-    name = config[:name] || "lux_native"
+    name = config[:name]
     version = config[:version] || "0.1.0"
-    edition = config[:edition] || @default_edition
-    deps = config[:dependencies] || %{}
 
-    toml = """
-    [package]
-    name = "#{name}"
-    version = "#{version}"
-    edition = "#{edition}"
+    cond do
+      is_nil(name) or name == "" -> {:error, :missing_name}
+      not semver_valid?(version) -> {:error, :invalid_version}
+      true ->
+        edition = config[:edition] || @default_edition
+        deps = config[:dependencies] || %{}
 
-    [dependencies]
-    #{format_deps(deps)}
-    """
+        toml = """
+        [package]
+        name = "#{name}"
+        version = "#{version}"
+        edition = "#{edition}"
 
-    {:ok, String.trim(toml)}
+        [dependencies]
+        #{format_deps(deps)}
+        """
+        {:ok, String.trim(toml)}
+    end
   end
 
-  @doc "Parse a Cargo.toml string into a map."
+  @spec parse_toml(String.t()) :: {:ok, map()} | {:error, atom()}
   def parse_toml(content) when is_binary(content) do
     lines = String.split(content, "\n")
     {result, _section} = Enum.reduce(lines, {%{}, nil}, fn line, {acc, section} ->
@@ -47,21 +66,26 @@ defmodule Lux.Rust.CargoManager do
     end)
     {:ok, result}
   end
+  def parse_toml(_), do: {:error, :invalid_input}
 
-  @doc "Add a dependency to a parsed config."
+  @spec add_dependency(map(), atom() | String.t(), String.t(), map()) :: {:ok, map()}
   def add_dependency(config, name, version, opts \\ %{}) do
     deps = Map.get(config, :dependencies, %{})
     dep = Map.merge(%{version: version}, opts)
     {:ok, Map.put(config, :dependencies, Map.put(deps, name, dep))}
   end
 
-  @doc "Remove a dependency."
+  @spec remove_dependency(map(), atom() | String.t()) :: {:ok, map()} | {:error, atom()}
   def remove_dependency(config, name) do
     deps = Map.get(config, :dependencies, %{})
-    {:ok, Map.put(config, :dependencies, Map.delete(deps, name))}
+    if Map.has_key?(deps, name) do
+      {:ok, Map.put(config, :dependencies, Map.delete(deps, name))}
+    else
+      {:error, :not_found}
+    end
   end
 
-  @doc "Resolve dependency versions (semver compatibility check)."
+  @spec resolve_dependencies(map()) :: {:ok, map()} | {:error, map()}
   def resolve_dependencies(deps) when is_map(deps) do
     resolved = Enum.map(deps, fn {name, spec} ->
       version = if is_map(spec), do: spec[:version] || "0.0.0", else: to_string(spec)
@@ -76,13 +100,15 @@ defmodule Lux.Rust.CargoManager do
     end
   end
 
-  @doc "Check if a build cache exists for given config hash."
+  @spec cache_key(map()) :: {:ok, String.t()}
   def cache_key(config) do
-    hash = :crypto.hash(:sha256, :erlang.term_to_binary(config)) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+    hash = :crypto.hash(:sha256, :erlang.term_to_binary(config))
+           |> Base.encode16(case: :lower)
+           |> binary_part(0, 16)
     {:ok, hash}
   end
 
-  @doc "Build command for cargo."
+  @spec build_command(keyword()) :: {:ok, String.t()}
   def build_command(opts \\ []) do
     profile = opts[:profile] || :release
     target = opts[:target]
@@ -96,23 +122,27 @@ defmodule Lux.Rust.CargoManager do
     {:ok, Enum.join(cmd, " ")}
   end
 
-  @doc "Bump version (major, minor, patch)."
+  @spec bump_version(String.t(), :major | :minor | :patch) :: {:ok, String.t()} | {:error, atom()}
   def bump_version(version, level \\ :patch) do
     case String.split(version, ".") do
       [major, minor, patch] ->
-        {maj, _} = Integer.parse(major)
-        {min, _} = Integer.parse(minor)
-        {pat, _} = Integer.parse(patch)
-
-        new = case level do
-          :major -> "#{maj + 1}.0.0"
-          :minor -> "#{maj}.#{min + 1}.0"
-          :patch -> "#{maj}.#{min}.#{pat + 1}"
+        with {maj, ""} <- Integer.parse(major),
+             {min, ""} <- Integer.parse(minor),
+             {pat, ""} <- Integer.parse(patch) do
+          new = case level do
+            :major -> "#{maj + 1}.0.0"
+            :minor -> "#{maj}.#{min + 1}.0"
+            :patch -> "#{maj}.#{min}.#{pat + 1}"
+          end
+          {:ok, new}
+        else
+          _ -> {:error, :invalid_version}
         end
-        {:ok, new}
       _ -> {:error, :invalid_version}
     end
   end
+
+  # --- Private ---
 
   defp format_deps(deps) do
     Enum.map_join(deps, "\n", fn {name, spec} ->
@@ -127,10 +157,17 @@ defmodule Lux.Rust.CargoManager do
     end)
   end
 
-  defp semver_valid?(version) do
+  defp semver_valid?(version) when is_binary(version) do
     case String.split(version, ".") do
-      [_major, _minor, _patch] -> true
+      [maj, min, pat] ->
+        Enum.all?([maj, min, pat], fn s ->
+          case Integer.parse(s) do
+            {_, ""} -> true
+            _ -> false
+          end
+        end)
       _ -> false
     end
   end
+  defp semver_valid?(_), do: false
 end
