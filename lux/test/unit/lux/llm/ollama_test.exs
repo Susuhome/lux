@@ -111,7 +111,7 @@ defmodule Lux.LLM.OllamaTest do
                     "id" => "call_1",
                     "type" => "function",
                     "function" => %{
-                      "name" => "Test_Prism",
+                      "name" => "Lux_LLM_OllamaTest_TestPrism",
                       "arguments" => ~s({"value": "success"})
                     }
                   }

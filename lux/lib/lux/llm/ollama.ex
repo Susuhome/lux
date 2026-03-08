@@ -168,7 +168,11 @@ defmodule Lux.LLM.Ollama do
   def list_models(opts \\ []) do
     endpoint = opts[:endpoint] || get_endpoint()
 
-    case Req.get("#{endpoint}/api/tags") do
+    [url: "#{endpoint}/api/tags"]
+    |> Keyword.merge(Application.get_env(:lux, __MODULE__, []))
+    |> Req.new()
+    |> Req.get()
+    |> case do
       {:ok, %{status: 200, body: %{"models" => models}}} ->
         {:ok, models}
 
@@ -198,10 +202,11 @@ defmodule Lux.LLM.Ollama do
   def pull_model(model_name, opts \\ []) do
     endpoint = opts[:endpoint] || get_endpoint()
 
-    case Req.post("#{endpoint}/api/pull",
-           json: %{name: model_name, stream: false},
-           receive_timeout: 600_000
-         ) do
+    [url: "#{endpoint}/api/pull", json: %{name: model_name, stream: false}, receive_timeout: 600_000]
+    |> Keyword.merge(Application.get_env(:lux, __MODULE__, []))
+    |> Req.new()
+    |> Req.post()
+    |> case do
       {:ok, %{status: 200}} ->
         Logger.info("Ollama: model #{model_name} pulled successfully")
         :ok
@@ -226,7 +231,11 @@ defmodule Lux.LLM.Ollama do
   def delete_model(model_name, opts \\ []) do
     endpoint = opts[:endpoint] || get_endpoint()
 
-    case Req.delete("#{endpoint}/api/delete", json: %{name: model_name}) do
+    [url: "#{endpoint}/api/delete", json: %{name: model_name}]
+    |> Keyword.merge(Application.get_env(:lux, __MODULE__, []))
+    |> Req.new()
+    |> Req.delete()
+    |> case do
       {:ok, %{status: 200}} ->
         Logger.info("Ollama: model #{model_name} deleted")
         :ok
@@ -251,7 +260,11 @@ defmodule Lux.LLM.Ollama do
   def show_model(model_name, opts \\ []) do
     endpoint = opts[:endpoint] || get_endpoint()
 
-    case Req.post("#{endpoint}/api/show", json: %{name: model_name}) do
+    [url: "#{endpoint}/api/show", json: %{name: model_name}]
+    |> Keyword.merge(Application.get_env(:lux, __MODULE__, []))
+    |> Req.new()
+    |> Req.post()
+    |> case do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}
 
@@ -275,7 +288,11 @@ defmodule Lux.LLM.Ollama do
   def health_check(opts \\ []) do
     endpoint = opts[:endpoint] || get_endpoint()
 
-    case Req.get("#{endpoint}/api/version") do
+    [url: "#{endpoint}/api/version"]
+    |> Keyword.merge(Application.get_env(:lux, __MODULE__, []))
+    |> Req.new()
+    |> Req.get()
+    |> case do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}
 
