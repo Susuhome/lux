@@ -148,3 +148,75 @@ fn json_type(v: &serde_json::Value) -> &'static str {
         serde_json::Value::Object(_) => "object",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn primitive_schema(name: &str) -> String {
+        serde_json::json!({
+            "name": "test",
+            "type": {"kind": "primitive", "name": name},
+            "required": [],
+            "description": ""
+        }).to_string()
+    }
+
+    #[test]
+    fn test_validate_primitive_string() {
+        assert!(validate(r#""hello""#, &primitive_schema("string")).is_ok());
+        assert!(validate("42", &primitive_schema("string")).is_err());
+    }
+
+    #[test]
+    fn test_validate_struct_required() {
+        let schema = serde_json::json!({
+            "name": "User",
+            "type": {
+                "kind": "struct",
+                "fields": {
+                    "name": {"name": "name", "type": {"kind": "primitive", "name": "string"}, "required": [], "description": ""},
+                    "age": {"name": "age", "type": {"kind": "primitive", "name": "integer"}, "required": [], "description": ""}
+                }
+            },
+            "required": ["name", "age"],
+            "description": ""
+        }).to_string();
+
+        assert!(validate(r#"{"name": "Alice", "age": 30}"#, &schema).is_ok());
+        assert!(validate(r#"{"name": "Alice"}"#, &schema).is_err()); // missing age
+    }
+
+    #[test]
+    fn test_validate_list() {
+        let schema = serde_json::json!({
+            "name": "numbers",
+            "type": {
+                "kind": "list",
+                "items": {"name": "item", "type": {"kind": "primitive", "name": "integer"}, "required": [], "description": ""}
+            },
+            "required": [],
+            "description": ""
+        }).to_string();
+
+        assert!(validate("[1,2,3]", &schema).is_ok());
+        assert!(validate(r#"[1,"two",3]"#, &schema).is_err());
+    }
+
+    #[test]
+    fn test_validate_optional() {
+        let schema = serde_json::json!({
+            "name": "maybe_string",
+            "type": {
+                "kind": "optional",
+                "inner": {"name": "inner", "type": {"kind": "primitive", "name": "string"}, "required": [], "description": ""}
+            },
+            "required": [],
+            "description": ""
+        }).to_string();
+
+        assert!(validate(r#""hello""#, &schema).is_ok());
+        assert!(validate("null", &schema).is_ok());
+        assert!(validate("42", &schema).is_err());
+    }
+}
