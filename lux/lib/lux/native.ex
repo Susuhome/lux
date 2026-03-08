@@ -37,4 +37,16 @@ defmodule Lux.Native do
   @doc "Benchmark JSON round-trip parsing for N iterations. Returns microseconds."
   @spec bench_json_roundtrip(String.t(), non_neg_integer()) :: non_neg_integer()
   def bench_json_roundtrip(_input, _iterations), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc "Convert plain JSON to tagged LuxType representation."
+  @spec to_lux_type(String.t()) :: String.t()
+  def to_lux_type(_json), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc "Convert tagged LuxType JSON back to plain JSON."
+  @spec from_lux_type(String.t()) :: String.t()
+  def from_lux_type(_typed_json), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc "Validate JSON against a schema definition."
+  @spec validate_schema(String.t(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  def validate_schema(_json, _schema_json), do: :erlang.nif_error(:nif_not_loaded)
 end

@@ -1,7 +1,9 @@
 mod types;
 mod error;
+mod advanced_types;
+mod schema;
 
-use rustler::{Env, Term, NifResult, Encoder};
+use rustler::{Env, Term, NifResult};
 use serde_json::Value as JsonValue;
 
 /// Initialize the NIF module
@@ -118,6 +120,35 @@ fn bench_json_roundtrip(input: String, iterations: u64) -> u64 {
         let _: JsonValue = serde_json::from_str(&input).unwrap();
     }
     start.elapsed().as_micros() as u64
+}
+
+/// Convert a plain JSON value to a tagged LuxType JSON representation
+#[rustler::nif]
+fn to_lux_type(json: String) -> NifResult<String> {
+    let value: JsonValue = serde_json::from_str(&json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("JSON parse error: {e}"))))?;
+    let lux_type = advanced_types::from_json_value(&value);
+    advanced_types::serialize(&lux_type)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialize error: {e}"))))
+}
+
+/// Convert a tagged LuxType JSON back to a plain JSON value
+#[rustler::nif]
+fn from_lux_type(typed_json: String) -> NifResult<String> {
+    let lux_type = advanced_types::deserialize(&typed_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Deserialize error: {e}"))))?;
+    let value = advanced_types::to_json_value(&lux_type);
+    serde_json::to_string(&value)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialize error: {e}"))))
+}
+
+/// Validate JSON against a schema definition (also JSON)
+#[rustler::nif]
+fn validate_schema(json: String, schema_json: String) -> NifResult<(rustler::Atom, String)> {
+    match schema::validate(&json, &schema_json) {
+        Ok(()) => Ok((rustler::types::atom::ok(), "valid".to_string())),
+        Err(e) => Ok((error::error_atom(), e)),
+    }
 }
 
 rustler::init!("Elixir.Lux.Native");
